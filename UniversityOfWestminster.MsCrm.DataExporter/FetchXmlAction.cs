@@ -1,6 +1,7 @@
 ﻿using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
@@ -47,7 +48,9 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
             }
         }
 
-        public IList<Entity> RunFetchXmlQuery(string fetchXmlQuery)
+        public IList<Entity> Entities { get; private set; }
+
+        public void RunFetchXmlQuery(string fetchXmlQuery)
         {
             List<Entity> entities = new List<Entity>();
             // Define the fetch attributes.
@@ -57,15 +60,13 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
             // Specify the current paging cookie. For retrieving the first page, 
             // pagingCookie should be null.
             string pagingCookie = null;
+            XmlDocument doc = CreateXml(fetchXmlQuery, pagingCookie, pageNumber, fetchCount);
+            FillEntityMetadata(doc);
             while (true)
             {
-                // Build fetchXml string with the placeholders.
-                string xml = CreateXml(fetchXmlQuery, pagingCookie, pageNumber, fetchCount);
-
-                // Excute the fetch query and get the xml result.
                 RetrieveMultipleRequest fetchRequest = new RetrieveMultipleRequest
                 {
-                    Query = new FetchExpression(xml)
+                    Query = new FetchExpression(ConvertXmlDocumentToString(doc))
                 };
 
                 var result = ((RetrieveMultipleResponse)Service.Execute(fetchRequest));
@@ -78,6 +79,7 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
                     pageNumber++;
                     pagingCookie = collection.PagingCookie;
                     Message = string.Format("{0} records and still going...", entities.Count);
+                    doc = CreateXml(fetchXmlQuery, pagingCookie, pageNumber, fetchCount);
                 }
                 else
                 {
@@ -85,13 +87,59 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
                     // If no more records in the result nodes, exit the loop.
                     break;
                 }
-
             }
-            
-            return entities;
+            Entities = entities;
         }
 
-        public string CreateXml(string xml, string cookie, int page, int count)
+        /// <summary>
+        /// Contains all attributes. For entity attributes, contains all names, for linked entity, contains alias.Attribute name.
+        /// </summary>
+        public IDictionary<string, AttributeMetadata> Attributes { get; private set; }
+
+        public IDictionary<string, IDictionary<int, string>> OptionSetLabels { get; private set; }
+
+        private void FillEntityMetadata(XmlDocument doc)
+        {
+            Attributes = new Dictionary<string, AttributeMetadata>();
+            OptionSetLabels = new Dictionary<string, IDictionary<int, string>>();
+            XmlNode node = doc.SelectSingleNode("/fetch/entity");
+            ExtractAttributes(node);
+            foreach ( XmlNode node2 in doc.SelectNodes("//link-entity"))
+            {
+                ExtractAttributes(node2);
+            }
+        }
+
+        private void ExtractAttributes(XmlNode node)
+        {
+            string entity = node.GetAttributeValue("name");
+            string alias = node.GetAttributeValue("alias");
+            foreach (XmlNode attribute in node.SelectNodes("./attribute/@name"))
+            {
+                string attributeName = attribute.Value;
+                string qualifiedAttribute = (string.IsNullOrEmpty(alias)) ? attributeName : string.Format("{0}.{1}", alias, attributeName);
+                var attReq = new RetrieveAttributeRequest();
+                attReq.EntityLogicalName = entity;
+                attReq.LogicalName = attributeName;
+                attReq.RetrieveAsIfPublished = true;
+
+                var attResponse = (RetrieveAttributeResponse)Service.Execute(attReq);
+
+                Attributes.Add(qualifiedAttribute, attResponse.AttributeMetadata);
+                if (attResponse.AttributeMetadata is EnumAttributeMetadata)
+                {
+                    var attMetadata = (EnumAttributeMetadata)attResponse.AttributeMetadata;
+                    var labels = new Dictionary<int, string>();
+                    foreach (var option in attMetadata.OptionSet.Options)
+                    {
+                        labels.Add(option.Value.GetValueOrDefault(), option.Label.UserLocalizedLabel.Label);
+                    }
+                    OptionSetLabels.Add(qualifiedAttribute, labels);
+                }
+            }
+        }
+
+        private XmlDocument CreateXml(string xml, string cookie, int page, int count)
         {
             StringReader stringReader = new StringReader(xml);
             XmlTextReader reader = new XmlTextReader(stringReader);
@@ -103,7 +151,7 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
             return CreateXml(doc, cookie, page, count);
         }
 
-        public string CreateXml(XmlDocument doc, string cookie, int page, int count)
+        private XmlDocument CreateXml(XmlDocument doc, string cookie, int page, int count)
         {
             XmlAttributeCollection attrs = doc.DocumentElement.Attributes;
 
@@ -122,6 +170,11 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
             countAttr.Value = System.Convert.ToString(count);
             attrs.Append(countAttr);
 
+            return doc;
+        }
+
+        private string ConvertXmlDocumentToString(XmlDocument doc)
+        {
             StringBuilder sb = new StringBuilder(1024);
             StringWriter stringWriter = new StringWriter(sb);
 
@@ -131,5 +184,63 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
 
             return sb.ToString();
         }
+
+        public string FormatObject(object value, string attribute)
+        {
+            if (value is EntityReference)
+                return FormatObject((EntityReference)value);
+            else if (value is EntityCollection)
+                return FormatObject((EntityCollection)value);
+            else if (value is Guid)
+                return FormatObject((Guid)value);
+            else if (value is OptionSetValue)
+                return FormatObject((OptionSetValue)value, attribute);
+            else if (value is Money)
+                return ((Money)value).Value.ToString();
+            else if (value is DateTime)
+                return ((DateTime)value).ToString("s");
+            else if (value is AliasedValue)
+                return FormatObject((AliasedValue)value, attribute);
+            else
+                return value.ToString();
+        }
+
+        private string FormatObject(OptionSetValue value, string attribute)
+        {
+            return OptionSetLabels[attribute][value.Value];
+        }
+
+        private string FormatObject(AliasedValue value, string attribute)
+        {
+            return FormatObject(value.Value, attribute);
+        }
+
+        private string FormatObject(EntityCollection value)
+        {
+            StringBuilder formattedValue = new StringBuilder();
+            for (int i = 0; i < value.Entities.Count; i++)
+            {
+                var e = value.Entities[i];
+                formattedValue.Append(e.Id.ToString("B"));
+                if (i < value.Entities.Count - 1)
+                {
+                    formattedValue.Append(", ");
+                }
+            }
+            return formattedValue.ToString();
+        }
+
+        private string FormatObject(Guid value)
+        {
+            return value.ToString("B");
+        }
+
+        private string FormatObject(EntityReference value)
+        {
+            if ((value.LogicalName == "systemuser") || (value.LogicalName == "team")) return value.Name;
+            return FormatObject(value.Id);
+        }
+
+
     }
 }

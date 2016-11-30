@@ -14,6 +14,7 @@ using Microsoft.Crm.Sdk.Messages;
 using System.IO;
 using System.Xml;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace UniversityOfWestminster.MsCrm.DataExporter
 {
@@ -35,6 +36,7 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
 
         private void ProcessFetchXmlQuery(string query)
         {
+            
             WorkAsync(new WorkAsyncInfo
             {
                 Message = "Fetching data...",
@@ -52,15 +54,15 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
                                 ((FetchXmlAction)sender).Message) );
                         }
                     };
-
-                    e.Result = action.RunFetchXmlQuery(e.Argument.ToString());
+                    action.RunFetchXmlQuery(e.Argument.ToString());
+                    e.Result = action;
 
                 },
                 PostWorkCallBack = e =>
                 {
                     if (e.Error == null)
                     {
-                        ProcessResponse((IList<Entity>)e.Result);
+                        ProcessResponse((FetchXmlAction)e.Result);
                     }
                     else
                     {
@@ -78,99 +80,61 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
             grid.Columns.Clear();
         }
 
-        private void ProcessResponse(IList<Entity> result)
+        private void SetupGridColumns(IDictionary<string, AttributeMetadata> attributes)
         {
-            ClearTheGrid();
-            if (result.Count == 0) return;
-            List<string> attributes = new List<string>();
-            foreach (var entity in result)
+            foreach (KeyValuePair< string, AttributeMetadata > a in attributes)
             {
-                foreach (string a in entity.Attributes.Keys)
+                AddColumn(a.Key);
+                if (a.Value.AttributeType == AttributeTypeCode.Lookup)
                 {
-                    if (!attributes.Contains(a))
-                    {
-                        attributes.Add(a);
-                        DataGridViewColumn column = new DataGridViewTextBoxColumn();
-                        column.Name = a;
-                        column.HeaderText = a;
-                        grid.Columns.Add(column);
-                    }
+                    AddColumn(GetLookupColumnName(a.Key));
                 }
             }
-            foreach (var entity in result)
+        }
+
+        private string GetLookupColumnName(string key)
+        {
+            return string.Format("{0}.Name", key);
+        }
+
+        private void AddColumn(string name)
+        {
+            DataGridViewColumn column = new DataGridViewTextBoxColumn();
+            column.Name = name;
+            column.HeaderText = name;
+            grid.Columns.Add(column);
+        }
+
+        private void ProcessResponse(FetchXmlAction result)
+        {
+            ClearTheGrid();
+            SetupGridColumns(result.Attributes);
+            foreach (var entity in result.Entities)
             {
-                grid.Rows.Add(EnumerateEntityValues(entity, attributes).ToArray());
+                grid.Rows.Add(EnumerateEntityValues(entity, result).ToArray());
             }
             tcMain.SelectedTab = pageDatatable;
         }
 
-        private IEnumerable<string> EnumerateEntityValues(Entity entity, IEnumerable<string> attributes)
+        private IEnumerable<string> EnumerateEntityValues(Entity entity, FetchXmlAction fetcher)
         {
             //foreach (string key in entity.Attributes.Keys)
-            foreach (string key in attributes)
+            foreach (KeyValuePair<string, AttributeMetadata> a in fetcher.Attributes)
             {
-                if (!entity.Contains(key))
+                if (!entity.Contains(a.Key))
                 {
                     yield return null;
                     continue;
                 }
-                object value = entity[key];
-                yield return FormatObject(value);
-                
-            }
-        }
-
-        private string FormatObject(object value)
-        {
-            if (value is EntityReference)
-                return FormatObject((EntityReference)value);
-            else if (value is EntityCollection)
-                return FormatObject((EntityCollection)value);
-            else if (value is Guid)
-                return FormatObject((Guid)value);
-            else if (value is OptionSetValue)
-                return ((OptionSetValue)value).Value.ToString();
-            else if (value is Money)
-                return ((Money)value).Value.ToString();
-            else if (value is DateTime)
-                return ((DateTime)value).ToString("s");
-            else if (value is AliasedValue)
-                return FormatObject((AliasedValue)value);
-            else
-                return value.ToString();
-        }
-        
-
-        private string FormatObject(AliasedValue value)
-        {
-            return FormatObject(value.Value);
-        }
-
-        private string FormatObject(EntityCollection value)
-        {
-            StringBuilder formattedValue = new StringBuilder();
-            for (int i = 0; i< value.Entities.Count; i++)
-            {
-                var e = value.Entities[i];
-                formattedValue.Append(e.Id.ToString("B"));
-                if (i < value.Entities.Count-1)
+                object value = entity[a.Key];
+                yield return fetcher.FormatObject(value, a.Key);
+                if (a.Value.AttributeType == AttributeTypeCode.Lookup)
                 {
-                    formattedValue.Append(", ");
+                    yield return ((EntityReference)value).Name;
                 }
             }
-            return formattedValue.ToString();
         }
 
-        private string FormatObject(Guid value)
-        {
-            return value.ToString("B");
-        }
-
-        private string FormatObject(EntityReference value)
-        {
-            if ((value.LogicalName == "systemuser")||(value.LogicalName == "team")) return value.Name;
-            else return FormatObject(value.Id);
-        }
 
         private void tsbWhoAmI_Click(object sender, EventArgs e)
         {
@@ -194,7 +158,7 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
 
         private void SaveDGVtoCSV(string fileName)
         {
-            using (StreamWriter writer = new StreamWriter(fileName,false, Encoding.Unicode))
+            using (StreamWriter writer = new StreamWriter(fileName,false, Encoding.UTF8))
             {
                 // Header row
                 for (int idx = 0; idx < grid.ColumnCount; idx++)

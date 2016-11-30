@@ -33,6 +33,7 @@
             this.tsbClose = new System.Windows.Forms.ToolStripButton();
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbGo = new System.Windows.Forms.ToolStripButton();
+            this.tsbSave = new System.Windows.Forms.ToolStripButton();
             this.saveFileDialogCSV = new System.Windows.Forms.SaveFileDialog();
             this.saveFileDialogXML = new System.Windows.Forms.SaveFileDialog();
             this.pageDatatable = new System.Windows.Forms.TabPage();
@@ -40,7 +41,7 @@
             this.pageRequest = new System.Windows.Forms.TabPage();
             this.txtRequest = new System.Windows.Forms.RichTextBox();
             this.tcMain = new System.Windows.Forms.TabControl();
-            this.tsbSave = new System.Windows.Forms.ToolStripButton();
+            this.pageOptions = new System.Windows.Forms.TabPage();
             this.toolStripMenu.SuspendLayout();
             this.pageDatatable.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.grid)).BeginInit();
@@ -87,6 +88,15 @@
             this.tsbGo.Text = "Execute";
             this.tsbGo.ToolTipText = "Perfomrs a Who I Am request";
             this.tsbGo.Click += new System.EventHandler(this.tsbWhoAmI_Click);
+            // 
+            // tsbSave
+            // 
+            this.tsbSave.Image = ((System.Drawing.Image)(resources.GetObject("tsbSave.Image")));
+            this.tsbSave.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbSave.Name = "tsbSave";
+            this.tsbSave.Size = new System.Drawing.Size(55, 24);
+            this.tsbSave.Text = "Save";
+            this.tsbSave.Click += new System.EventHandler(this.asCSVToolStripMenuItem_Click);
             // 
             // saveFileDialogCSV
             // 
@@ -148,6 +158,7 @@
             // 
             this.tcMain.Controls.Add(this.pageRequest);
             this.tcMain.Controls.Add(this.pageDatatable);
+            this.tcMain.Controls.Add(this.pageOptions);
             this.tcMain.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tcMain.Location = new System.Drawing.Point(0, 27);
             this.tcMain.Multiline = true;
@@ -156,14 +167,15 @@
             this.tcMain.Size = new System.Drawing.Size(522, 355);
             this.tcMain.TabIndex = 6;
             // 
-            // tsbSave
+            // pageOptions
             // 
-            this.tsbSave.Image = ((System.Drawing.Image)(resources.GetObject("tsbSave.Image")));
-            this.tsbSave.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.tsbSave.Name = "tsbSave";
-            this.tsbSave.Size = new System.Drawing.Size(55, 24);
-            this.tsbSave.Text = "Save";
-            this.tsbSave.Click += new System.EventHandler(this.asCSVToolStripMenuItem_Click);
+            this.pageOptions.Location = new System.Drawing.Point(4, 22);
+            this.pageOptions.Name = "pageOptions";
+            this.pageOptions.Padding = new System.Windows.Forms.Padding(3);
+            this.pageOptions.Size = new System.Drawing.Size(514, 329);
+            this.pageOptions.TabIndex = 3;
+            this.pageOptions.Text = "Options";
+            this.pageOptions.UseVisualStyleBackColor = true;
             // 
             // MainUserControl
             // 
@@ -198,5 +210,6 @@
         private System.Windows.Forms.TabPage pageRequest;
         private System.Windows.Forms.RichTextBox txtRequest;
         private System.Windows.Forms.TabControl tcMain;
+        private System.Windows.Forms.TabPage pageOptions;
     }
 }
