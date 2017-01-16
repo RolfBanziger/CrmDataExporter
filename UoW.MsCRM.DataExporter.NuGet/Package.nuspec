@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>UoW.MsCRM.DataExporter.NuGet</id>
-    <version>1.0.0.1457</version>
+    <version>1.0.0.1458</version>
     <title>Data Exporter</title>
     <authors>Rolf Bänziger, University of Westminster</authors>
     <owners></owners>
