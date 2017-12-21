@@ -124,6 +124,10 @@ namespace UniversityOfWestminster.MsCrm.DataExporter
                 if (!entity.Contains(a.Key))
                 {
                     yield return null;
+                    if (a.Value.AttributeType == AttributeTypeCode.Lookup)
+                    {
+                        yield return null;
+                    }
                     continue;
                 }
                 object value = entity[a.Key];
